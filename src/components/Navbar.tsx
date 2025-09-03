@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useProductStore } from '@/store/useProductStore';
+import AuthModal from '@/components/AuthModal';
 import { 
   Home, 
   LayoutDashboard, 
@@ -11,15 +12,26 @@ import {
   Settings, 
   Menu, 
   X,
-  Shield
+  Shield,
+  User,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const location = useLocation();
-  const { theme, toggleTheme } = useProductStore();
+  const { theme, toggleTheme, user, signOut } = useProductStore();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -97,8 +109,37 @@ const Navbar = () => {
               })}
             </div>
 
-            {/* Theme Toggle & Mobile Menu */}
+            {/* Theme Toggle & Auth & Mobile Menu */}
             <div className="flex items-center space-x-2">
+              {/* User Actions */}
+              {user ? (
+                <div className="hidden md:flex items-center space-x-2">
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {user.email?.split('@')[0]}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSignOut}
+                    className="gap-1"
+                  >
+                    <LogOut className="h-3 w-3" />
+                    Sign Out
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="neon"
+                  size="sm"
+                  onClick={() => setShowAuthModal(true)}
+                  className="hidden md:flex gap-1"
+                >
+                  <User className="h-3 w-3" />
+                  Sign In
+                </Button>
+              )}
+
               <Button
                 variant="ghost"
                 size="icon"
@@ -157,6 +198,37 @@ const Navbar = () => {
                     </Link>
                   );
                 })}
+                
+                {/* Auth buttons in mobile menu */}
+                {user ? (
+                  <>
+                    <div className="text-sm text-muted-foreground flex items-center gap-2 px-3 py-2">
+                      <User className="h-4 w-4" />
+                      {user.email}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      onClick={handleSignOut}
+                      className="justify-start"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="neon"
+                    onClick={() => {
+                      setShowAuthModal(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="justify-start"
+                  >
+                    <User className="h-4 w-4" />
+                    Sign In
+                  </Button>
+                )}
+                
                 <Button
                   variant="ghost"
                   onClick={toggleTheme}
@@ -170,6 +242,8 @@ const Navbar = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </>
   );
 };

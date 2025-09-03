@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import ProductCard from '@/components/ProductCard';
+import AuthModal from '@/components/AuthModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useProductStore } from '@/store/useProductStore';
@@ -21,15 +22,53 @@ import { cn } from '@/lib/utils';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { products, addProduct, removeProduct } = useProductStore();
+  const { products, user, fetchProducts, removeProduct, loading } = useProductStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'soon-expiring' | 'expired'>('all');
-  const [displayProducts, setDisplayProducts] = useState(mockProducts);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
-    // Use mock data for demo
-    setDisplayProducts(mockProducts);
-  }, [products]);
+    if (user) {
+      fetchProducts();
+    }
+  }, [user, fetchProducts]);
+
+  // Use real products if user is authenticated, otherwise show auth prompt
+  const displayProducts = user ? products : [];
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        
+        <div className="container mx-auto px-4 pt-20 pb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center py-16"
+          >
+            <div className="glass-card p-12 max-w-md mx-auto">
+              <div className="text-6xl mb-4">🔐</div>
+              <h3 className="text-xl font-semibold mb-2">Sign in required</h3>
+              <p className="text-muted-foreground mb-6">
+                Please sign in to access your dashboard and manage your products.
+              </p>
+              <Button 
+                variant="neon" 
+                onClick={() => setShowAuthModal(true)}
+                className="gap-2"
+              >
+                Sign In to Continue
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+        
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      </div>
+    );
+  }
 
   const filteredProducts = displayProducts.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -56,9 +95,12 @@ const Dashboard = () => {
     navigate('/donations');
   };
 
-  const handleDelete = (id: string) => {
-    console.log('Deleting product:', id);
-    // removeProduct(id);
+  const handleDelete = async (id: string) => {
+    try {
+      await removeProduct(id);
+    } catch (error) {
+      console.error('Error deleting product:', error);
+    }
   };
 
   return (
