@@ -17,9 +17,9 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.3.0",
     "multer": "^2.0.2",
-    "openai": "^4.28.0",
-    "sentiment": "^5.0.2",
-    "quagga": "^0.12.1"
+    "openai": "^6.10.0",
+    "quagga": "^0.12.1",
+    "sentiment": "^5.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
