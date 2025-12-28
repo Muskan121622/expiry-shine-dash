@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-// API base URL - deployed backend server
-const API_BASE_URL = 'https://expiry-shine-dash-4.onrender.com/api';
+// API base URL - deployed backend server or local dev
+const API_BASE_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:3001/api'
+  : 'https://expiry-shine-dash-4.onrender.com/api';
 
 // Create axios instance
 const api = axios.create({

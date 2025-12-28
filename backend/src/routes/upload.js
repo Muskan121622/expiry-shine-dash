@@ -3,6 +3,7 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const barcodeScanner = require('../services/barcodeScanner');
 const ocrService = require('../services/ocrService');
+const aiService = require('../services/aiService');
 const router = express.Router();
 
 // Configure Cloudinary
@@ -20,14 +21,14 @@ const upload = multer({ storage });
 router.post('/combined', upload.single('image'), async (req, res) => {
   try {
     const { manualBarcode } = req.body;
-    
+
     if (!req.file && !manualBarcode) {
       return res.status(400).json({ error: 'Either image or barcode required' });
     }
 
     let imageUrl = null;
     let ocrData = { barcode: null, expiryDate: null, text: null };
-    
+
     // Process image if provided
     if (req.file) {
       const result = await new Promise((resolve, reject) => {
@@ -35,32 +36,52 @@ router.post('/combined', upload.single('image'), async (req, res) => {
           {
             resource_type: 'image',
             folder: 'expiry-products',
-            transformation: [{ width: 800, height: 600, crop: 'limit' }, { quality: 'auto' }]
+            transformation: [{ width: 1200, height: 900, crop: 'limit' }, { quality: 'auto' }]
           },
           (error, result) => error ? reject(error) : resolve(result)
         ).end(req.file.buffer);
       });
-      
+
       imageUrl = result.secure_url;
       console.log('Image uploaded:', imageUrl);
-      
-      // Extract OCR data
-      ocrData = await ocrService.scanImage(imageUrl);
-      console.log('OCR extracted:', ocrData);
+
+      // Try AI analysis first
+      const aiData = await aiService.analyzeProductImage(imageUrl);
+
+      if (aiData && (aiData.barcode || aiData.expiryDate || aiData.productDetails)) {
+        console.log('AI analysis successful or provided product details');
+        ocrData = {
+          barcode: aiData.barcode,
+          expiryDate: aiData.expiryDate,
+          productDetails: aiData.productDetails
+        };
+      } else {
+        // Fallback to legacy OCR
+        console.log('AI failed or returned no data, falling back to legacy OCR');
+        ocrData = await ocrService.scanImage(imageUrl);
+      }
+      console.log('Final scan results:', ocrData);
     }
-    
+
     // Use manual barcode or OCR barcode
-    const finalBarcode = manualBarcode || ocrData.barcode;
-    console.log('Final barcode:', finalBarcode);
-    
-    let productInfo = null;
-    
-    // Lookup product info if barcode available
+    let finalBarcode = manualBarcode || ocrData.barcode;
+
+    // Sanitize the final barcode
     if (finalBarcode) {
-      productInfo = await barcodeScanner.getProductInfo(finalBarcode);
-      console.log('Product lookup result:', productInfo);
+      finalBarcode = finalBarcode.toString().replace(/\D/g, '');
     }
-    
+
+    console.log('Processed barcodes:', { manual: manualBarcode, ocr: ocrData.barcode, final: finalBarcode });
+
+    let productInfo = ocrData?.productDetails || null;
+
+    // Lookup product info if barcode available and not already found by AI
+    if (finalBarcode && !productInfo) {
+      console.log('Barcode lookup required for:', finalBarcode);
+      productInfo = await barcodeScanner.getProductInfo(finalBarcode);
+      console.log('Barcode lookup result:', productInfo);
+    }
+
     // Fallback to demo data if no product found
     if (!productInfo && finalBarcode) {
       productInfo = {
@@ -80,7 +101,7 @@ router.post('/combined', upload.single('image'), async (req, res) => {
         shelfLife: 30
       };
     }
-    
+
     // Calculate expiry date
     let finalExpiryDate = null;
     if (ocrData.expiryDate) {
@@ -90,7 +111,7 @@ router.post('/combined', upload.single('image'), async (req, res) => {
       date.setDate(date.getDate() + productInfo.shelfLife);
       finalExpiryDate = date.toISOString().split('T')[0];
     }
-    
+
     // Build complete response
     const response = {
       success: true,
@@ -101,6 +122,7 @@ router.post('/combined', upload.single('image'), async (req, res) => {
         name: productInfo.name,
         brand: productInfo.brand,
         category: productInfo.category,
+        description: productInfo.description,
         expiryDate: finalExpiryDate,
         nutrients: productInfo.nutrients,
         ingredients: productInfo.ingredients,
@@ -108,9 +130,9 @@ router.post('/combined', upload.single('image'), async (req, res) => {
         barcode: finalBarcode
       } : null
     };
-    
+
     res.json(response);
-    
+
   } catch (error) {
     console.error('Combined upload error:', error);
     res.status(500).json({ error: 'Processing failed' });
@@ -136,7 +158,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
     });
 
     const scanResult = await ocrService.scanImage(result.secure_url);
-    
+
     res.json({
       imageUrl: result.secure_url,
       barcode: scanResult.barcode,
@@ -154,7 +176,7 @@ router.post('/image', upload.single('image'), async (req, res) => {
 router.post('/barcode', async (req, res) => {
   try {
     const { barcode } = req.body;
-    
+
     if (!barcode) {
       return res.status(400).json({ error: 'Barcode is required' });
     }
@@ -162,7 +184,7 @@ router.post('/barcode', async (req, res) => {
     // Get product info from enhanced scanner (always returns data)
     const productInfo = await barcodeScanner.getProductInfo(barcode);
     console.log('Barcode scanner returned:', productInfo);
-    
+
     if (productInfo) {
       // Calculate expiry date based on shelf life
       const expiryDate = new Date();

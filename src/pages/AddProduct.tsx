@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Upload, 
-  Camera, 
-  Edit3, 
-  Package, 
+import {
+  Upload,
+  Camera,
+  Edit3,
+  Package,
   Calendar,
   Tag,
   Image as ImageIcon,
@@ -19,6 +19,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useProductStore } from '@/store/useProductStore';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { api } from '@/lib/mongodb';
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -37,6 +39,12 @@ const AddProduct = () => {
     barcode: '',
     ingredients: ''
   });
+  const [activeTab, setActiveTab] = useState('upload');
+
+  const barcodeRef = useRef<HTMLInputElement>(null);
+  const expiryRef = useRef<HTMLInputElement>(null);
+  const manualBarcodeRef = useRef<HTMLInputElement>(null);
+  const manualExpiryRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -64,53 +72,61 @@ const AddProduct = () => {
   };
 
   const uploadImage = async (file: File) => {
+    if (!productData.barcode) {
+      toast.error('Barcode is required! Please enter it first.');
+      barcodeRef.current?.focus();
+      return;
+    }
+
+    if (!productData.expiryDate) {
+      toast.error('Expiry Date is required! Please enter it manually.');
+      expiryRef.current?.focus();
+      return;
+    }
+
     setUploading(true);
     try {
-      // Step 1: Upload image
       const formData = new FormData();
       formData.append('image', file);
+      if (productData.barcode) {
+        formData.append('manualBarcode', productData.barcode);
+      }
 
-      const imageResponse = await fetch('http://localhost:3001/api/upload/image', {
-        method: 'POST',
-        body: formData,
+      const response = await api.post('/upload/combined', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const imageResult = await imageResponse.json();
-      
-      // Step 2: Lookup barcode
-      console.log('Looking up barcode:', productData.barcode);
-      const barcodeResponse = await fetch('http://localhost:3001/api/upload/barcode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode: productData.barcode })
-      });
-      
-      console.log('Barcode response status:', barcodeResponse.status);
-      const barcodeResult = await barcodeResponse.json();
-      console.log('Barcode result:', barcodeResult);
-      
-      // Combine results
-      if (barcodeResult.productDetails) {
+      const result = response.data;
+
+      if (result.success && result.productDetails) {
         setProductData({
-          name: barcodeResult.productDetails.name,
-          category: barcodeResult.productDetails.category,
-          expiryDate: imageResult.detectedExpiryDate || barcodeResult.productDetails.expiryDate,
-          description: `${barcodeResult.productDetails.brand} - Auto-detected`,
-          imageUrl: imageResult.imageUrl,
-          nutrients: barcodeResult.productDetails.nutrients,
-          brand: barcodeResult.productDetails.brand || '',
-          barcode: productData.barcode,
-          ingredients: barcodeResult.productDetails.ingredients || ''
+          name: result.productDetails.name,
+          category: result.productDetails.category,
+          expiryDate: productData.expiryDate, // KEEP the manual expiry date
+          description: result.productDetails.description || `${result.productDetails.brand} - Auto-detected`,
+          imageUrl: result.imageUrl || result.productDetails.imageUrl,
+          nutrients: result.productDetails.nutrients,
+          brand: result.productDetails.brand || '',
+          barcode: result.barcode || productData.barcode,
+          ingredients: result.productDetails.ingredients || ''
         });
-      } else {
-        console.log('No product details from barcode API, using fallback');
-        setProductData(prev => ({ 
-          ...prev, 
-          imageUrl: imageResult.imageUrl
+        toast.success(result.ocrData?.barcode ? 'Barcode detected from image!' : 'Product details found!');
+        // Switch to manual tab to review and save
+        setTimeout(() => setActiveTab('manual'), 1000);
+      } else if (result.success && !result.productDetails && result.imageUrl) {
+        // Only image uploaded but no barcode found
+        setProductData(prev => ({
+          ...prev,
+          imageUrl: result.imageUrl,
+          expiryDate: result.ocrData?.expiryDate || prev.expiryDate
         }));
+        if (result.ocrData?.expiryDate) {
+          toast.success('Expiry date detected from image!');
+        }
+        toast.info('No barcode found in image. Please enter it manually or check the photo.');
       }
     } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Upload failed: ' + error.message);
+      console.error('Lookup failed:', error);
+      toast.error('Failed to process image. Please try again or enter details manually.');
     } finally {
       setUploading(false);
     }
@@ -118,7 +134,7 @@ const AddProduct = () => {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
+
     try {
       await addProduct({
         name: productData.name,
@@ -128,9 +144,10 @@ const AddProduct = () => {
         nutrients: productData.nutrients,
         brand: productData.brand,
         barcode: productData.barcode,
-        ingredients: productData.ingredients
+        ingredients: productData.ingredients,
+        status: 'active'
       });
-      
+
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to save product:', error);
@@ -148,7 +165,7 @@ const AddProduct = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <div className="container mx-auto px-4 pt-20 pb-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -166,7 +183,7 @@ const AddProduct = () => {
           </div>
 
           <div className="glass-card p-8">
-            <Tabs defaultValue="upload" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-8 glass-card p-1">
                 <TabsTrigger value="upload" className="flex items-center gap-2">
                   <Upload className="h-4 w-4" />
@@ -189,25 +206,38 @@ const AddProduct = () => {
                     <Tag className="h-5 w-5 text-primary" />
                     Enter Barcode
                   </h3>
-                  <div className="flex gap-3">
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-sm font-medium">Barcode (Required)</Label>
                     <Input
-                      placeholder="Enter barcode number (required)"
+                      ref={barcodeRef}
+                      placeholder="Enter barcode..."
                       value={productData.barcode || ''}
                       onChange={(e) => setProductData(prev => ({ ...prev, barcode: e.target.value }))}
-                      className="flex-1"
+                      className="w-full"
+                      required
+                    />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-sm font-medium">Expiry Date (Required)</Label>
+                    <Input
+                      type="date"
+                      ref={expiryRef}
+                      value={productData.expiryDate}
+                      onChange={(e) => setProductData(prev => ({ ...prev, expiryDate: e.target.value }))}
+                      className="w-full"
                       required
                     />
                   </div>
                 </div>
-                
+
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.5 }}
                   className={cn(
                     'border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-300 relative overflow-hidden group',
-                    dragOver 
-                      ? 'border-primary bg-primary/10 shadow-glow-primary' 
+                    dragOver
+                      ? 'border-primary bg-primary/10 shadow-glow-primary'
                       : 'border-border-glass/50 hover:border-primary/50 hover:bg-primary/5'
                   )}
                   onDragOver={handleDragOver}
@@ -215,7 +245,7 @@ const AddProduct = () => {
                   onDrop={handleDrop}
                 >
                   <div className="scan-effect absolute inset-0 opacity-0 group-hover:opacity-100" />
-                  
+
                   <input
                     type="file"
                     id="file-upload"
@@ -223,7 +253,7 @@ const AddProduct = () => {
                     accept="image/*"
                     onChange={handleFileSelect}
                   />
-                  
+
                   {selectedFile ? (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.8 }}
@@ -260,9 +290,9 @@ const AddProduct = () => {
                     </div>
                   )}
                 </motion.div>
-                
+
                 {/* Lookup Button */}
-                {selectedFile && productData.barcode && (
+                {selectedFile && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -292,7 +322,7 @@ const AddProduct = () => {
                     </p>
                   </motion.div>
                 )}
-                
+
                 {/* Product Details Display */}
                 {productData.name && (
                   <motion.div
@@ -305,37 +335,37 @@ const AddProduct = () => {
                       <Sparkles className="h-5 w-5 text-primary" />
                       <h3 className="text-lg font-semibold">Detected Product Information</h3>
                     </div>
-                    
+
                     <div className="grid md:grid-cols-2 gap-6">
                       {/* Product Image */}
                       {productData.imageUrl && (
                         <div className="space-y-2">
                           <Label className="text-sm font-medium">Product Image</Label>
-                          <img 
-                            src={productData.imageUrl} 
+                          <img
+                            src={productData.imageUrl}
                             alt={productData.name}
                             className="w-full h-48 object-cover rounded-lg border border-border-glass/50"
                           />
                         </div>
                       )}
-                      
+
                       {/* Product Details */}
                       <div className="space-y-4">
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Product Name</Label>
                           <p className="text-lg font-semibold">{productData.name}</p>
                         </div>
-                        
+
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Category</Label>
                           <p className="capitalize">{productData.category}</p>
                         </div>
-                        
+
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Expiry Date</Label>
                           <p className="font-medium">{productData.expiryDate}</p>
                         </div>
-                        
+
                         {productData.description && (
                           <div>
                             <Label className="text-sm font-medium text-muted-foreground">Description</Label>
@@ -344,7 +374,7 @@ const AddProduct = () => {
                         )}
                       </div>
                     </div>
-                    
+
                     {/* Nutrients */}
                     {productData.nutrients && (
                       <div className="space-y-3">
@@ -353,13 +383,13 @@ const AddProduct = () => {
                           {Object.entries(productData.nutrients).filter(([_, value]) => value).map(([key, value]) => (
                             <div key={key} className="bg-background-glass/50 p-3 rounded-lg text-center">
                               <div className="text-xs text-muted-foreground capitalize">{key}</div>
-                              <div className="font-semibold text-sm">{value}</div>
+                              <div className="font-semibold text-sm">{String(value)}</div>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
-                    
+
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-4">
                       <Button
@@ -420,12 +450,10 @@ const AddProduct = () => {
                           if (productData.barcode) {
                             setUploading(true);
                             try {
-                              const response = await fetch('http://localhost:3001/api/upload/barcode', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ barcode: productData.barcode })
+                              const response = await api.post('/upload/barcode', {
+                                barcode: productData.barcode
                               });
-                              const result = await response.json();
+                              const result = response.data;
                               if (result.productDetails) {
                                 setProductData({
                                   ...productData,
@@ -438,9 +466,15 @@ const AddProduct = () => {
                                   barcode: result.barcode || '',
                                   ingredients: result.productDetails.ingredients || ''
                                 });
+                                toast.success('Product details found!');
+                                // Switch to manual tab to review and save
+                                setTimeout(() => setActiveTab('manual'), 1000);
+                              } else {
+                                toast.error('Product not found in database.');
                               }
                             } catch (error) {
                               console.error('Barcode lookup failed:', error);
+                              toast.error('Connection failed. Please ensure the backend server is running on port 3001.');
                             } finally {
                               setUploading(false);
                             }
@@ -479,6 +513,23 @@ const AddProduct = () => {
                   transition={{ duration: 0.5 }}
                 >
                   <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Barcode Field (Mandatory) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="barcode" className="text-base font-semibold flex items-center gap-2">
+                        <Tag className="h-4 w-4 text-primary" />
+                        Barcode Number (Required)
+                      </Label>
+                      <Input
+                        id="barcode"
+                        ref={manualBarcodeRef}
+                        placeholder="Enter 8-14 digit barcode..."
+                        value={productData.barcode || ''}
+                        onChange={(e) => setProductData(prev => ({ ...prev, barcode: e.target.value }))}
+                        className="glass-card border-border-glass/50 focus:border-primary/50 text-lg"
+                        required
+                      />
+                    </div>
+
                     {/* Product Name */}
                     <div className="space-y-2">
                       <Label htmlFor="name" className="text-base font-semibold">
@@ -534,6 +585,7 @@ const AddProduct = () => {
                       </Label>
                       <Input
                         id="expiry"
+                        ref={manualExpiryRef}
                         type="date"
                         value={productData.expiryDate}
                         onChange={(e) => setProductData(prev => ({ ...prev, expiryDate: e.target.value }))}
@@ -564,10 +616,10 @@ const AddProduct = () => {
                           Nutritional Information (Auto-detected)
                         </Label>
                         <div className="glass-card p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-                          {Object.entries(productData.nutrients).map(([key, value]) => (
+                          {Object.entries(productData.nutrients).filter(([_, value]) => value).map(([key, value]) => (
                             <div key={key} className="text-center">
                               <div className="text-sm text-muted-foreground capitalize">{key}</div>
-                              <div className="font-semibold">{value}</div>
+                              <div className="font-semibold">{String(value)}</div>
                             </div>
                           ))}
                         </div>
