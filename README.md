@@ -2,7 +2,7 @@
 
 A Modern AI-powered Product Expiry Tracking System
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Web-blue)](#)
 [![Tech Stack](https://img.shields.io/badge/tech--stack-React%20%7C%20TypeScript%20%7C%20Node.js%20%7C%20MongoDB-brightgreen)](#)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-v2.1%20adopted-4baaaa.svg)](CODE_OF_CONDUCT.md)
