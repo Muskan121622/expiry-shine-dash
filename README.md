@@ -1,10 +1,45 @@
+
 # Smart Expiry Guardian
 
 A Modern AI-powered Product Expiry Tracking System
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Web-blue)](#)
-[![Tech Stack](https://img.shields.io/badge/tech--stack-React%20%7C%20TypeScript%20%7C%20Node.js%20%7C%20MongoDB-brightgreen)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Contributors](https://img.shields.io/github/contributors/Muskan121622/expiry-shine-dash)](https://github.com/Muskan121622/expiry-shine-dash/graphs/contributors)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor_Covenant-v2.1%20adopted-4baaaa.svg)](CODE_OF_CONDUCT.md)
+
+
+## ✨ Quick Start
+```
+git clone https://github.com/Muskan121622/expiry-shine-dash.git
+cd expiry-shine-dash
+npm install
+npm run dev
+```
+
+## 🧑‍💻 Contributors
+
+A huge thank you to all the amazing people who have contributed to **Expiry Shine Dash**!
+
+<a href="https://github.com/Muskan121622/expiry-shine-dash/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Muskan121622/expiry-shine-dash" />
+</a>
+
+**Want to contribute?** Follow our [CONTRIBUTING.md](CONTRIBUTING.md) — all PRs welcome! 🚀
+
+
+
+### Want to contribute?
+1. [Fork the repo](https://github.com/Muskan121622/expiry-shine-dash/fork)
+2. Create branch (`git checkout -b feature/xyz`)
+3. Commit (`git commit -m 'Add xyz'`)
+4. Push (`git push origin feature/xyz`)
+5. [Open PR](.github/PULL_REQUEST_TEMPLATE.md) 🎉
+
+## 📚 Resources
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+
+
 
 ## 📌 Project Overview
 
