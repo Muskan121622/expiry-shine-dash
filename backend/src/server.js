@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const errorHandler=require('../errorHandler')
 const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
@@ -21,6 +22,13 @@ MongoClient.connect(process.env.MONGODB_URI)
     app.locals.db = db;
 
     // Routes
+    // 404 handler for unknown API routes
+app.use((req, res, next) => {
+  const error = new Error('API route not found');
+  error.statusCode = 404;
+  next(error);
+});
+
     app.use('/api/auth', require('./routes/auth'));
     app.use('/api/products', require('./routes/products'));
     app.use('/api/donations', require('./routes/donations'));
@@ -38,6 +46,7 @@ MongoClient.connect(process.env.MONGODB_URI)
       console.log(`Server running on port ${PORT}`);
     });
   })
+    
   .catch(error => {
     console.error('MongoDB connection error:', error);
     process.exit(1);
